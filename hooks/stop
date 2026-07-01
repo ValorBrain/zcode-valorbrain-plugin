@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Stop hook: lembrete de handoff no fim da sessão/resposta.
+set -uo pipefail
+
+escape_for_json() {
+  if command -v jq >/dev/null 2>&1; then printf '%s' "$1" | jq -Rs .
+  else
+    local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"; printf '"%s"' "$s"
+  fi
+}
+
+CONTEXT="<valorbrain-handoff-gate>
+Se esta sessão envolveu mudança significativa (feature nova, decisão importante, debug longo),
+registre um handoff via \`mcp__valorbrain__memory_store\` (type=handoff) ou \`mcp__valorbrain__team_handoff\`
+antes de finalizar. Inclua: o que mudou, arquivos tocados, próximos passos.
+Se foi trabalho trivial, ignore este lembrete.
+</valorbrain-handoff-gate>"
+
+CONTEXT_ESC=$(escape_for_json "$CONTEXT")
+printf '{\n  "additionalContext": %s\n}\n' "$CONTEXT_ESC"
+exit 0
