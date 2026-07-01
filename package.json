@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@valordigital/valorbrain-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Memória persistente e conhecimento estruturado para agentes ZCode.",
+  "bin": {
+    "vbctl": "./bin/vbctl"
+  }
+}
