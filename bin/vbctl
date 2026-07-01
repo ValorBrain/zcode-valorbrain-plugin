@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# vbctl — CLI helper para o plugin ValorBrain.
+# Bridge bash (curl + jq) que fala MCP JSON-RPC stateless sobre HTTP.
+# Usado pelos hooks (que rodam em shell isolado, sem acesso às tools do agente).
+set -uo pipefail
+
+# ---------- Resolução de configuração (3 níveis de fallback) ----------
+ZCODE_CONFIG="${HOME}/.zcode/cli/config.json"
+
+resolve_url() {
+  # 1. env var
+  if [ -n "${VALORBRAIN_MCP_URL:-}" ]; then printf '%s' "$VALORBRAIN_MCP_URL"; return; fi
+  # 2. config.env do plugin
+  local ce="${VALORBRAIN_PLUGIN_DATA:-${HOME}/.zcode/cli/plugins/data/valorbrain}/config.env"
+  if [ -f "$ce" ] && grep -q '^VALORBRAIN_MCP_URL=' "$ce" 2>/dev/null; then
+    source "$ce"; printf '%s' "$VALORBRAIN_MCP_URL"; return
+  fi
+  # 3. ~/.zcode/cli/config.json (já existe hoje)
+  if [ -f "$ZCODE_CONFIG" ] && command -v jq >/dev/null 2>&1; then
+    local u; u=$(jq -r '.mcp.servers.valorbrain.url // empty' "$ZCODE_CONFIG" 2>/dev/null)
+    if [ -n "$u" ]; then printf '%s' "$u"; return; fi
+  fi
+  # 4. default
+  printf '%s' "https://mcpbrain.valor.digital/mcp"
+}
+
+resolve_token() {
+  if [ -n "${VALORBRAIN_MCP_TOKEN:-}" ]; then printf '%s' "$VALORBRAIN_MCP_TOKEN"; return; fi
+  local ce="${VALORBRAIN_PLUGIN_DATA:-${HOME}/.zcode/cli/plugins/data/valorbrain}/config.env"
+  if [ -f "$ce" ] && grep -q '^VALORBRAIN_MCP_TOKEN=' "$ce" 2>/dev/null; then
+    source "$ce"; printf '%s' "$VALORBRAIN_MCP_TOKEN"; return
+  fi
+  if [ -f "$ZCODE_CONFIG" ] && command -v jq >/dev/null 2>&1; then
+    local t; t=$(jq -r '.mcp.servers.valorbrain.headers.Authorization // empty' "$ZCODE_CONFIG" 2>/dev/null | sed 's/^Bearer //')
+    if [ -n "$t" ]; then printf '%s' "$t"; return; fi
+  fi
+  return 1
+}
+
+# ---------- Chamada MCP genérica (stateless, single POST) ----------
+# $1 = tool name, $2 = JSON arguments string
+mcp_call() {
+  local tool="$1" args="${2:-{\}}"
+  local url token
+  url=$(resolve_url) || { echo "vbctl: no URL resolved" >&2; return 1; }
+  token=$(resolve_token) || { echo "vbctl: no token resolved (set VALORBRAIN_MCP_TOKEN or configure ~/.zcode/cli/config.json)" >&2; return 1; }
+
+  local payload
+  payload=$(jq -nc --arg t "$tool" --argjson a "$args" \
+    '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:$t,arguments:$a}}')
+
+  local resp
+  resp=$(curl -sf -X POST "$url" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -H "Authorization: Bearer $token" \
+    -d "$payload" --max-time 8 2>/dev/null) || { echo "vbctl: MCP request failed (tool=$tool)" >&2; return 1; }
+
+  # Extrai .result.content[0].text ; se erro RPC, loga e falha
+  if echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
+    echo "vbctl: RPC error: $(echo "$resp" | jq -rc '.error.message')" >&2
+    return 1
+  fi
+  echo "$resp" | jq -r '.result.content[0].text // empty'
+}
+
+# ---------- JSON escape para injection-safe args ----------
+json_str() { printf '%s' "$1" | jq -Rc .; }
+
+# ---------- Subcomandos ----------
+cmd_ping() {
+  mcp_call "whoami" '{}' || return 1
+}
+
+cmd_profile() {
+  mcp_call "profile" '{}' || return 1
+}
+
+cmd_briefing() {
+  mcp_call "team_briefing" '{}' || return 1
+}
+
+cmd_prepare() {
+  [ -z "${1:-}" ] && { echo "usage: vbctl prepare \"<message>\"" >&2; return 2; }
+  local msg; msg=$(json_str "$1")
+  mcp_call "memory_prepare" "{\"message\":$msg}" || return 1
+}
+
+cmd_handoff() {
+  [ -z "${1:-}" ] && { echo "usage: vbctl handoff \"<summary>\" [to]" >&2; return 2; }
+  local msg to; msg=$(json_str "$1"); to=$(json_str "${2:-agent}")
+  mcp_call "team_handoff" "{\"summary\":$msg,\"to\":$to}" || return 1
+}
+
+# ---------- Usage ----------
+usage() {
+  cat >&2 <<EOF
+vbctl — ValorBrain MCP bridge (plugin helper)
+
+Usage: vbctl <command> [args]
+  ping                  Health-check (whoami)
+  profile               Workspace profile (SessionStart)
+  briefing              Team briefing (SessionStart)
+  prepare "<msg>"       Recall context for a message (UserPromptSubmit)
+  handoff "<summary>" [to]  Register session handoff (Stop)
+
+Config (ordem de precedência):
+  1. VALORBRAIN_MCP_URL / VALORBRAIN_MCP_TOKEN (env)
+  2. \$VALORBRAIN_PLUGIN_DATA/config.env
+  3. ~/.zcode/cli/config.json (mcp.servers.valorbrain)
+EOF
+}
+
+# ---------- Dispatch ----------
+case "${1:-}" in
+  ping)     cmd_ping ;;
+  profile)  cmd_profile ;;
+  briefing) cmd_briefing ;;
+  prepare)  shift; cmd_prepare "$@" ;;
+  handoff)  shift; cmd_handoff "$@" ;;
+  *)        usage; exit 2 ;;
+esac
