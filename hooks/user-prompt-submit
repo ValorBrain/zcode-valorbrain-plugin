@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# UserPromptSubmit hook: injeta recall de memória contextual para cada prompt.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VBCTL="${PLUGIN_ROOT}/bin/vbctl"
+
+# Toggle via userConfig (env var injetada pelo runtime, se disponível)
+AUTO_PREPARE="${VALORBRAIN_AUTO_PREPARE:-true}"
+if [ "$AUTO_PREPARE" = "false" ]; then
+  printf '{}\n'; exit 0
+fi
+
+escape_for_json() {
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$1" | jq -Rs .
+  else
+    local s="$1"
+    s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+    printf '"%s"' "$s"
+  fi
+}
+
+# Lê stdin: JSON {"prompt": "..."} (padrão Claude Code SDK)
+INPUT=$(cat)
+PROMPT=""
+if command -v jq >/dev/null 2>&1; then
+  PROMPT=$(printf '%s' "$INPUT" | jq -r '.prompt // empty' 2>/dev/null)
+fi
+# Fallback: se não veio JSON ou sem jq, usa stdin cru
+[ -z "$PROMPT" ] && PROMPT="$INPUT"
+
+[ -z "$PROMPT" ] && { printf '{}\n'; exit 0; }
+
+# Recall via vbctl (falha → vazio, não quebra)
+RECALL="$("$VBCTL" prepare "$PROMPT" 2>/dev/null || true)"
+
+if [ -z "$RECALL" ]; then
+  printf '{}\n'; exit 0
+fi
+
+CONTEXT="<valorbrain-recall>\nContexto recuperado da memória para este prompt. Use se relevante.\n\n${RECALL}\n</valorbrain-recall>"
+CONTEXT_ESC=$(escape_for_json "$CONTEXT")
+printf '{\n  "additionalContext": %s\n}\n' "$CONTEXT_ESC"
+exit 0
