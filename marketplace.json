@@ -1,0 +1,16 @@
+{
+  "name": "valor-digital",
+  "owner": {
+    "name": "Valor Digital",
+    "url": "https://valor.digital"
+  },
+  "plugins": [
+    {
+      "name": "valorbrain",
+      "source": ".",
+      "description": "Memória persistente e conhecimento estruturado para agentes ZCode.",
+      "version": "0.1.0"
+    }
+  ],
+  "version": 1
+}
