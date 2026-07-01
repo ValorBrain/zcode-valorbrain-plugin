@@ -2,3 +2,6 @@ config.env
 *.log
 .DS_Store
 node_modules/
+
+# Internal design docs (kept locally for reference, not published)
+docs/superpowers/
