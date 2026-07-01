@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# SessionStart hook: injeta profile + briefing do ValorBrain no contexto da sessão.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+VBCTL="${PLUGIN_ROOT}/bin/vbctl"
+
+# Escape JSON string (rápido, via jq se disponível, senão fallback sed)
+escape_for_json() {
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$1" | jq -Rsc .
+  else
+    local s="$1"
+    s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"
+    printf '"%s"' "$s"
+  fi
+}
+
+# Coleta profile + briefing (falhas → string vazia, sessão não quebra)
+PROFILE="$("$VBCTL" ping 2>/dev/null || true)"
+BRIEFING="$("$VBCTL" briefing 2>/dev/null || true)"
+
+# Se ambos vazios, MCP indisponível — injeta aviso mínimo
+if [ -z "$PROFILE" ] && [ -z "$BRIEFING" ]; then
+  CONTEXT="<valorbrain-context>\nValorBrain MCP indisponível nesta sessão. Memória persistente offline.\n</valorbrain-context>"
+else
+  CONTEXT="<valorbrain-context>\nMemória persistente ValorBrain ativa. Use quando relevante; não cite explicitamente ao usuário.\n\n## Perfil\n${PROFILE}\n\n## Briefing\n${BRIEFING}\n</valorbrain-context>"
+fi
+
+CONTEXT_ESC=$(escape_for_json "$CONTEXT")
+printf '{\n  "additionalContext": %s\n}\n' "$CONTEXT_ESC"
+exit 0
