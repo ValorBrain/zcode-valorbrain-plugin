@@ -1,0 +1,45 @@
+{
+  "name": "valorbrain",
+  "version": "0.1.0",
+  "description": "Memória persistente e conhecimento estruturado para agentes ZCode.",
+  "author": {
+    "name": "Valor Digital",
+    "url": "https://valor.digital"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/valordigital/zcode-valorbrain-plugin",
+  "repository": "https://github.com/valordigital/zcode-valorbrain-plugin",
+  "skills": "skills",
+  "hooks": "hooks",
+  "mcpServers": {
+    "valorbrain": {
+      "type": "http",
+      "url": "${user_config.valorbrain_url}",
+      "headers": {
+        "Authorization": "Bearer ${user_config.valorbrain_token}"
+      }
+    }
+  },
+  "userConfig": {
+    "valorbrain_url": {
+      "type": "string",
+      "default": "https://mcpbrain.valor.digital/mcp",
+      "description": "URL do servidor MCP ValorBrain."
+    },
+    "valorbrain_token": {
+      "type": "string",
+      "secret": true,
+      "description": "Bearer token de autenticação (formato vbm_...)."
+    },
+    "auto_prepare": {
+      "type": "boolean",
+      "default": true,
+      "description": "Injeta recall automático a cada prompt (UserPromptSubmit hook)."
+    },
+    "write_reminder": {
+      "type": "boolean",
+      "default": true,
+      "description": "Injeta lembrete de gravação após Edit/Write (PostToolUse hook)."
+    }
+  }
+}
