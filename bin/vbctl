@@ -13,7 +13,8 @@ resolve_url() {
   # 2. config.env do plugin
   local ce="${VALORBRAIN_PLUGIN_DATA:-${HOME}/.zcode/cli/plugins/data/valorbrain}/config.env"
   if [ -f "$ce" ] && grep -q '^VALORBRAIN_MCP_URL=' "$ce" 2>/dev/null; then
-    source "$ce"; printf '%s' "$VALORBRAIN_MCP_URL"; return
+    local val; val=$(grep -E "^VALORBRAIN_MCP_URL=" "$ce" 2>/dev/null | head -1 | cut -d= -f2-)
+    [ -n "$val" ] && { printf '%s' "$val"; return; }
   fi
   # 3. ~/.zcode/cli/config.json (já existe hoje)
   if [ -f "$ZCODE_CONFIG" ] && command -v jq >/dev/null 2>&1; then
@@ -28,7 +29,8 @@ resolve_token() {
   if [ -n "${VALORBRAIN_MCP_TOKEN:-}" ]; then printf '%s' "$VALORBRAIN_MCP_TOKEN"; return; fi
   local ce="${VALORBRAIN_PLUGIN_DATA:-${HOME}/.zcode/cli/plugins/data/valorbrain}/config.env"
   if [ -f "$ce" ] && grep -q '^VALORBRAIN_MCP_TOKEN=' "$ce" 2>/dev/null; then
-    source "$ce"; printf '%s' "$VALORBRAIN_MCP_TOKEN"; return
+    local val; val=$(grep -E "^VALORBRAIN_MCP_TOKEN=" "$ce" 2>/dev/null | head -1 | cut -d= -f2-)
+    [ -n "$val" ] && { printf '%s' "$val"; return; }
   fi
   if [ -f "$ZCODE_CONFIG" ] && command -v jq >/dev/null 2>&1; then
     local t; t=$(jq -r '.mcp.servers.valorbrain.headers.Authorization // empty' "$ZCODE_CONFIG" 2>/dev/null | sed 's/^Bearer //')
@@ -40,6 +42,8 @@ resolve_token() {
 # ---------- Chamada MCP genérica (stateless, single POST) ----------
 # $1 = tool name, $2 = JSON arguments string
 mcp_call() {
+  command -v curl >/dev/null 2>&1 || { echo "vbctl: curl not found" >&2; return 1; }
+  command -v jq   >/dev/null 2>&1 || { echo "vbctl: jq not found" >&2; return 1; }
   local tool="$1" args="${2:-{\}}"
   local url token
   url=$(resolve_url) || { echo "vbctl: no URL resolved" >&2; return 1; }
@@ -53,7 +57,7 @@ mcp_call() {
   resp=$(curl -sf -X POST "$url" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \
-    -H "Authorization: Bearer $token" \
+    -K <(printf 'header = "Authorization: Bearer %s"\n' "$token") \
     -d "$payload" --max-time 8 2>/dev/null) || { echo "vbctl: MCP request failed (tool=$tool)" >&2; return 1; }
 
   # Extrai .result.content[0].text ; se erro RPC, loga e falha
