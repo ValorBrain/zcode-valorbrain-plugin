@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# PostToolUse hook: injeta lembrete de gravação seletiva após Edit/Write.
+# Não chama MCP — é um gate estático. A decisão de gravar é do agente (via skill).
+set -uo pipefail
+
+WRITE_REMINDER="${VALORBRAIN_WRITE_REMINDER:-true}"
+if [ "$WRITE_REMINDER" = "false" ]; then
+  printf '{}\n'; exit 0
+fi
+
+# Lê stdin para extrair tool_name (opcional, só pro placeholder)
+INPUT=$(cat)
+TOOL="Edit"
+if command -v jq >/dev/null 2>&1; then
+  T=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+  [ -n "$T" ] && TOOL="$T"
+fi
+
+escape_for_json() {
+  if command -v jq >/dev/null 2>&1; then printf '%s' "$1" | jq -sR .
+  else
+    local s="$1"; s="${s//\\/\\\\}"; s="${s//\"/\\\"}"; s="${s//$'\n'/\\n}"; s="${s//$'\r'/\\r}"; s="${s//$'\t'/\\t}"; printf '"%s"' "$s"
+  fi
+}
+
+CONTEXT="<valorbrain-write-gate>
+Acabou de modificar código via ${TOOL}. Avalie se merece gravação na memória persistente.
+Use a skill \`valorbrain-memory\` e grave SE UM OU MAIS destes critérios for verdadeiro:
+1. Decisão arquitetural ou de design tomada (não apenas implementação direta).
+2. Novo padrão, convenção ou antipattern descoberto/introduzido.
+3. Fix não-trivial — bug que custou investigação, não correção óbvia.
+4. Bug recorrente (já aconteceu antes, provavelmente vai repetir).
+5. Decisão de produto ou trade-off (o porquê, não só o quê).
+6. Resultado de pesquisa ou spike (descoberta que vale lembrar amanhã).
+7. Mudança que você provavelmente vai precisar lembrar amanhã.
+
+Se nenhum critério se aplicar, NÃO grave — silêncio é saudável para o vault.
+Se aplicável, chame \`mcp__valorbrain__memory_store\` com type, title e content adequados.
+</valorbrain-write-gate>"
+
+CONTEXT_ESC=$(escape_for_json "$CONTEXT")
+printf '{\n  "additionalContext": %s\n}\n' "$CONTEXT_ESC"
+exit 0
