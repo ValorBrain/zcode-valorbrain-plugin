@@ -53,12 +53,19 @@ mcp_call() {
   payload=$(jq -nc --arg t "$tool" --argjson a "$args" \
     '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:$t,arguments:$a}}')
 
+  # Auth header via temp file. Process substitution -K <(...) breaks on
+  # Windows/MSYS native curl, which cannot read the /dev/fd/N device file.
+  local auth_cfg
+  auth_cfg=$(mktemp) || { echo "vbctl: mktemp failed" >&2; return 1; }
+  printf 'header = "Authorization: Bearer %s"\n' "$token" > "$auth_cfg"
+
   local resp
   resp=$(curl -sf -X POST "$url" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \
-    -K <(printf 'header = "Authorization: Bearer %s"\n' "$token") \
-    -d "$payload" --max-time 8 2>/dev/null) || { echo "vbctl: MCP request failed (tool=$tool)" >&2; return 1; }
+    -K "$auth_cfg" \
+    -d "$payload" --max-time 8 2>/dev/null) || { rm -f "$auth_cfg"; echo "vbctl: MCP request failed (tool=$tool)" >&2; return 1; }
+  rm -f "$auth_cfg"
 
   # Extrai .result.content[0].text ; se erro RPC, loga e falha
   if echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
