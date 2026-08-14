@@ -145,20 +145,24 @@ log "Plugin copiado para ${CACHE_BASE}"
 # ---------- Step 2: Marketplace registry ----------
 echo "$(c_bold '[2/5]') Registrando marketplace..."
 mkdir -p "$MARKETPLACE_DIR"
-cat > "${MARKETPLACE_DIR}/marketplace.json" <<EOF
-{
-  "name": "${MARKETPLACE_NAME}",
-  "plugins": [
-    {
-      "cachePath": "${CACHE_BASE}",
-      "name": "${PLUGIN_NAME}",
-      "source": "filesystem",
-      "version": "${PLUGIN_VERSION}"
-    }
-  ],
-  "version": 1
-}
-EOF
+# On Windows (Git Bash/MSYS/Cygwin), a raw $HOME-based path is either
+# C:\... (single backslashes = invalid JSON escape in a heredoc) or
+# /c/... (unresolvable by the native ZCode app). Normalize to a native
+# Windows path and let jq handle the JSON escaping by construction.
+if command -v cygpath >/dev/null 2>&1 && case "${OSTYPE:-}" in msys*|cygwin*) true;; *) false;; esac; then
+  CACHE_BASE_JSON=$(cygpath -w "$CACHE_BASE")
+else
+  CACHE_BASE_JSON="$CACHE_BASE"
+fi
+jq -n \
+  --arg cache "$CACHE_BASE_JSON" \
+  --arg mkt "$MARKETPLACE_NAME" \
+  --arg name "$PLUGIN_NAME" \
+  --arg ver "$PLUGIN_VERSION" \
+  '{name: $mkt,
+    plugins: [{cachePath: $cache, name: $name, source: "filesystem", version: $ver}],
+    version: 1}' \
+  > "${MARKETPLACE_DIR}/marketplace.json"
 log "Marketplace registrado"
 
 # ---------- Step 3: MCP config (hybrid logic) ----------
