@@ -11,7 +11,9 @@ ZCODE_HOME="${HOME}/.zcode/cli"
 CACHE_DIR="${ZCODE_HOME}/plugins/cache/${MARKETPLACE_NAME}"
 MARKETPLACE_DIR="${ZCODE_HOME}/plugins/marketplaces/${MARKETPLACE_NAME}"
 DATA_DIR="${ZCODE_HOME}/plugins/data/${PLUGIN_NAME}@${MARKETPLACE_NAME}"
+VBCTL_DATA_DIR="${ZCODE_HOME}/plugins/data/${PLUGIN_NAME}"
 CONFIG_FILE="${ZCODE_HOME}/config.json"
+KNOWN_MARKETPLACES="${ZCODE_HOME}/plugins/known_marketplaces.json"
 ENABLE_KEY="${PLUGIN_NAME}@${MARKETPLACE_NAME}"
 
 c_green() { printf '\033[32m%s\033[0m' "$1"; }
@@ -35,10 +37,22 @@ if [ -d "$MARKETPLACE_DIR" ]; then
   log "Removido: ${MARKETPLACE_DIR}"
 fi
 
-# Remove data dir
-if [ -d "$DATA_DIR" ]; then
-  rm -rf "$DATA_DIR"
-  log "Removido: ${DATA_DIR}"
+# Remove data dirs — INCLUDING vbctl's (data/<name> holds config.env with the token)
+for d in "$DATA_DIR" "$VBCTL_DATA_DIR"; do
+  if [ -d "$d" ]; then
+    rm -rf "$d"
+    log "Removido: ${d}"
+  fi
+done
+
+# Deregister marketplace from known_marketplaces.json (if registered)
+if [ -f "$KNOWN_MARKETPLACES" ] && command -v jq >/dev/null 2>&1; then
+  if jq -e --arg mkt "$MARKETPLACE_NAME" '.marketplaces[] | select(.id == $mkt)' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
+    tmp=$(mktemp)
+    jq --arg mkt "$MARKETPLACE_NAME" 'del(.marketplaces[] | select(.id == $mkt))' \
+      "$KNOWN_MARKETPLACES" > "$tmp" && mv "$tmp" "$KNOWN_MARKETPLACES"
+    log "Marketplace '${MARKETPLACE_NAME}' desregistrado do known_marketplaces.json"
+  fi
 fi
 
 # Disable in config.json (preserve everything else, including MCP entry)
