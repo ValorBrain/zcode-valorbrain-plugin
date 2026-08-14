@@ -35,7 +35,7 @@ Antes de responder perguntas conceituais ou retomar trabalho, verifique se já e
 
 ### Feche o laço de qualidade após o recall
 
-Ao usar uma memória na resposta, declare-a com `memory_used` (passando os docids, ex: `#ab12cd`, ou os caminhos que vieram no recall). As linhas de contexto entregue já trazem o docid — copie-o. Isso faz a memória útil subir no ranking e a irrelevante decair — é o sinal de feedback mais forte que existe. **Regra, não opcional**: sem a declaração, o sinal de qualidade fica cego e a cobertura de uso do tenant não sai do lugar.
+Ao usar uma memória na resposta, declare-a com `memory_used` (passando os docids, ex: `#ab12cd`, ou os caminhos que vieram no recall). As linhas de contexto entregue já trazem o docid — copie-o. Isso faz a memória útil subir no ranking e a irrelevante decair — é o sinal de feedback mais forte que existe. **Regra, não opcional**: sem a declaração, o sinal de qualidade fica cego e a cobertura de uso do tenant não sai do lugar. Quando o usuário **confirmar** o que a memória dizia, passe `verdict="confirmed"`; quando **corrigir/contradisser**, passe `verdict="corrected"` — isso alimenta o laço de confiança.
 
 ## Workflow 2 — Store (registrar)
 
