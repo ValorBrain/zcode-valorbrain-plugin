@@ -39,7 +39,8 @@ if [ -z "$RECALL" ]; then
   printf '{}\n'; exit 0
 fi
 
-CONTEXT="<valorbrain-recall>\nContexto recuperado da memória para este prompt. Use se relevante.\n\n${RECALL}\n</valorbrain-recall>"
+CONTEXT="<valorbrain-recall>\nContexto recuperado da memória para este prompt. Use se relevante.\n\n${RECALL}\n"
+CONTEXT="${CONTEXT}\nAo usar uma destas memórias na resposta, declare com mcp__valorbrain__memory_used os docids (#hex) ou caminhos correspondentes.\n</valorbrain-recall>"
 CONTEXT_ESC=$(escape_for_json "$CONTEXT")
 printf '{\n  "additionalContext": %s\n}\n' "$CONTEXT_ESC"
 exit 0
