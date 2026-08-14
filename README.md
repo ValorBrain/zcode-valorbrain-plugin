@@ -2,7 +2,7 @@
 
 Memória persistente e conhecimento estruturado para agentes ZCode. Integra o [ValorBrain](https://valor.digital) via MCP, com hooks automáticos de contexto e skill de workflow.
 
-Funciona em macOS e Linux. Idempotente — pode reinstalar sem medo.
+Funciona em macOS, Linux e Windows (Git Bash). Idempotente — pode reinstalar sem medo.
 
 ## O que faz
 
@@ -21,7 +21,8 @@ A decisão de **gravar** é sempre do agente — hooks só injetam lembretes. Le
 
 ### Pré-requisitos
 
-- `jq`, `curl`, `rsync` instalados (presentes por padrão no macOS e a maioria das distros Linux)
+- `jq` e `curl` instalados (no Windows: `winget install jqlang.jq`; Git Bash já traz curl)
+- `rsync` opcional — com fallback automático para `cp` (Windows Git Bash não tem rsync)
 - ZCode instalado (`~/.zcode/cli/`)
 - Um token ValorBrain `vbm_...` (obtenha no painel do ValorBrain)
 
