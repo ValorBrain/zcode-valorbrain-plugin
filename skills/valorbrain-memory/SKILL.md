@@ -22,14 +22,20 @@ Antes de responder perguntas conceituais ou retomar trabalho, verifique se já e
 | Situação | Tool | Exemplo |
 |----------|------|---------|
 | Pergunta conceitual / "como fazemos X" | `memory_retrieve` | "como lidamos com multi-tenant?" |
+| Valor exato, ID, data, chave (busca literal) | `memory_grep` | "qual o valor de `X_API_KEY`?", "mudou entre v1 e v2?" |
 | Fato puntual com data | `keyed_facts_as_of` | snapshot de config em data específica |
 | Contexto da sessão/prompt atual | `memory_prepare` | (geralmente automático via hook) |
+| Orientação rápida no início da sessão | `working_context` | stable facts + decisões recentes em uma chamada |
 | Documento similar a um de referência | `find_similar` | "ache docs parecidos com este" |
 | Histórico de um documento | `timeline` | "como este decision evoluiu" |
 | Documento específico por path/id | `get` / `multi_get` | leitura direta |
 | Relação causal | `find_causal_links` | "o que causou este problema?" |
 
-**Boa prática:** prefira `memory_retrieve` (híbrido) pra perguntas abertas. Use `keyed_facts_as_of` pra fatos versionados (configs, estados).
+**Boa prática:** prefira `memory_retrieve` (híbrido) pra perguntas abertas. Use `memory_grep` pra buscas exatas (valor, ID, data) — ele devolve só a linha correspondente, custando muito menos token que um trecho inteiro. Use `keyed_facts_as_of` pra fatos versionados (configs, estados). No início de sessão, `working_context` é o atalho mais barato pra se situar.
+
+### Feche o laço de qualidade após o recall
+
+Ao usar uma memória na resposta, declare-a com `memory_used` (passando os docids, ex: `#ab12cd`). Isso faz a memória útil subir no ranking e a irrelevante decair — é o sinal de feedback mais forte que existe. Opcional, mas recomendado.
 
 ## Workflow 2 — Store (registrar)
 
@@ -77,6 +83,15 @@ Chame `mcp__valorbrain__memory_store` com:
 - ❌ Gravar trivia (`git status`, log de build, output de `ls`).
 - ❌ Duplicar memória existente — faça `memory_retrieve` antes de gravar.
 
+### Corrigindo um fato gravado errado
+
+Quando um valor persistido está **errado**, não use `memory_store` para "corrigir" criando outro doc. Use `assert_authority_correction`: ele persiste o valor correto com nível de autoridade, marca os valores anteriores do mesmo `fact_key` como superados (perdedores) e invalida soft os docs em prosa que ainda afirmam o valor antigo. Use `upsert_keyed_fact` apenas para snapshots neutros versionados por data — reserve a correção autoritativa pra quando há um valor "certo" que substitui um "errado".
+
+### Notas efêmeras vs. diário
+
+- **`scratchpad`** — rascunho de raciocínio só desta sessão (não indexado na busca híbrida). Use pra acumular observações intermediárias que você vai consolidar depois; limpe ao fim.
+- **`diary_write`** / **`diary_read`** — diário observacional do agente (eventos, decisões, contexto de ambiente). Entradas ficam memorias buscáveis. Use quando quiser registrar algo pra revisão futura fora do fluxo de Store formal.
+
 ## Workflow 3 — Handoff (passar adiante)
 
 No fim de uma sessão com trabalho significativo, registre um handoff para que o próximo agente (ou você amanhã) retome sem perda.
@@ -98,6 +113,12 @@ mcp__valorbrain__team_handoff
   priority: "normal"
 ```
 
+Quando você **consumir** um handoff (terminou o trabalho, ou é duplicata/resolvido), marque-o com `team_handoff_consume` — evita acúmulo de handoffs stale no briefing.
+
+### Arcos narrativos
+
+Para encadear episódios em torno de um objetivo, use `create_memory_arc` e liste-os com `list_memory_arcs` (filtre por status: `active` | `completed` | `paused`) ou `list_arcs`. Útil pra tracker uma iniciativa de longa duração através de múltiplas sessões.
+
 ## Workflow 4 — Health (manutenção)
 
 Periodicamente (ou quando o recall degradar):
@@ -107,14 +128,23 @@ Periodicamente (ou quando o recall degradar):
 - `index_stats` — tamanho do vault, docs precisando embedding.
 - `reindex` — se houver docs stale (>0) após mudanças.
 - `notifications_check` — alertas/propostas acumuladas.
+- `usage_report` — uso medido do tenant (operações por canal/ferramenta/agente, latência p50/p95, série diária). Dimensiona valor entregue e ajuda a planejar capacidade.
+
+### Operações longas (`run_async`)
+
+Tools como `reindex`, `import_docs`, `vault_sync`, `build_graphs`, `lifecycle_sweep` e `export_docs` aceitam `run_async=true` para não segurar a chamada. Quando usar:
+- `operation_status` (passe `wait_ms` pra long-poll) — acompanhe progresso e pegue o resultado ao terminar.
+- `operation_list` — encontre um handle perdido ou veja se outra instância já tem um reindex rodando.
+- `operation_cancel` — pare cooperativamente (o runner para no próximo checkpoint, sem deixar escrita pela metade).
 
 **Princípio:** vault enxuto recall melhor. Inflação degrada. Por isso os critérios de Store são seletivos.
 
-## Mapa completo de tools (31)
+## Mapa completo de tools (68)
 
 | Grupo | Tools |
 |-------|-------|
-| **Recall** | `memory_retrieve`, `memory_prepare`, `find_similar`, `keyed_facts_as_of`, `timeline`, `multi_get`, `get`, `ripple_rag_retrieve`, `memory_evolution_status` |
-| **Store** | `memory_store`, `store`, `import_docs`, `upsert_keyed_fact`, `diary_write`, `record_lesson`, `memory_pin`, `memory_snooze`, `memory_forget`, `append_entity_card` |
-| **Collab** | `team_message`, `team_handoff`, `team_inbox`, `team_notify_human`, `team_briefing`, `team_roster`, `create_memory_arc`, `list_memory_arcs`, `list_memory_episodes`, `get_memory_episode`, `profile`, `whoami` |
-| **Graph/Health** | `kg_query`, `kg_explain`, `find_causal_links`, `build_graphs`, `memory_health`, `lifecycle_sweep`, `lifecycle_restore`, `lifecycle_status`, `index_stats`, `reindex`, `beads_sync`, `vault_sync`, `list_vaults`, `notifications_check`, `notifications_mark_read`, `feedback_check`, `feedback_submit`, `list_proposals`, `list_lessons`, `export_docs`, `list_entity_cards`, `list_kg_quarantine`, `approve_kg_quarantine`, `reject_kg_quarantine`, `kg_entity_resolve_report` |
+| **Recall** | `memory_retrieve`, `memory_prepare`, `memory_grep`, `working_context`, `find_similar`, `keyed_facts_as_of`, `timeline`, `multi_get`, `get`, `ripple_rag_retrieve`, `memory_evolution_status` |
+| **Store** | `memory_store`, `store`, `import_docs`, `upsert_keyed_fact`, `assert_authority_correction`, `diary_write`, `record_lesson`, `memory_pin`, `memory_snooze`, `memory_forget`, `append_entity_card`, `memory_used` |
+| **Collab** | `team_message`, `team_handoff`, `team_handoff_consume`, `team_inbox`, `team_notify_human`, `team_briefing`, `team_roster`, `create_memory_arc`, `list_memory_arcs`, `list_arcs`, `list_memory_episodes`, `get_memory_episode`, `profile`, `whoami` |
+| **Graph/Health** | `kg_query`, `kg_explain`, `find_causal_links`, `build_graphs`, `memory_health`, `lifecycle_sweep`, `lifecycle_restore`, `lifecycle_status`, `index_stats`, `reindex`, `beads_sync`, `vault_sync`, `list_vaults`, `notifications_check`, `notifications_mark_read`, `feedback_check`, `feedback_submit`, `list_proposals`, `list_lessons`, `export_docs`, `list_entity_cards`, `list_kg_quarantine`, `approve_kg_quarantine`, `reject_kg_quarantine`, `kg_entity_resolve_report`, `usage_report` |
+| **Ops/Sessão** | `operation_status`, `operation_list`, `operation_cancel`, `scratchpad`, `diary_read` |
