@@ -50,7 +50,6 @@ echo ""
 
 need_cmd jq
 need_cmd curl
-need_cmd rsync
 
 # ---------- Parse args ----------
 INTERACTIVE=true
@@ -135,8 +134,15 @@ echo ""
 # ---------- Step 1: Copy plugin to cache ----------
 echo "$(c_bold '[1/5]') Instalando arquivos do plugin..."
 mkdir -p "$(dirname "$CACHE_BASE")"
-rsync -a --delete --exclude='.git' --exclude='docs/' --exclude='install.sh' \
-  "${SCRIPT_DIR}/" "${CACHE_BASE}/"
+if command -v rsync >/dev/null 2>&1; then
+  rsync -a --delete --exclude='.git' --exclude='docs/' --exclude='install.sh' \
+    "${SCRIPT_DIR}/" "${CACHE_BASE}/"
+else
+  # Portable fallback — Windows Git Bash ships no rsync.
+  mkdir -p "${CACHE_BASE}"
+  cp -r "${SCRIPT_DIR}/." "${CACHE_BASE}/"
+  rm -rf "${CACHE_BASE}/.git" "${CACHE_BASE}/docs" "${CACHE_BASE}/install.sh"
+fi
 chmod +x "${CACHE_BASE}/bin/vbctl" "${CACHE_BASE}/hooks/session-start" \
   "${CACHE_BASE}/hooks/user-prompt-submit" "${CACHE_BASE}/hooks/post-tool-use" \
   "${CACHE_BASE}/hooks/stop" "${CACHE_BASE}/hooks/run-hook.cmd"
