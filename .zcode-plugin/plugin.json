@@ -7,8 +7,8 @@
     "url": "https://valor.digital"
   },
   "license": "MIT",
-  "homepage": "https://github.com/valordigital/zcode-valorbrain-plugin",
-  "repository": "https://github.com/valordigital/zcode-valorbrain-plugin",
+  "homepage": "https://github.com/ValorBrain/zcode-valorbrain-plugin",
+  "repository": "https://github.com/ValorBrain/zcode-valorbrain-plugin",
   "skills": "skills",
   "hooks": "hooks",
   "mcpServers": {
@@ -28,8 +28,8 @@
     },
     "valorbrain_token": {
       "type": "string",
-      "secret": true,
-      "description": "Bearer token de autenticação (formato vbm_...)."
+      "description": "Bearer token de autenticação (formato vbm_...).",
+      "sensitive": true
     },
     "auto_prepare": {
       "type": "boolean",
